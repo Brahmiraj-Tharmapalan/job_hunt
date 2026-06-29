@@ -305,7 +305,7 @@ export function SettingsForm({
 
             {completed && (
               <Link
-                href="/dashboard"
+                href="/dashboard/jobs"
                 className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-contrast transition-colors hover:bg-accent-strong"
               >
                 Finish setup

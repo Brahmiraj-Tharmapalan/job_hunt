@@ -252,7 +252,9 @@ function SortableChip({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
   const style = {
-    transform: CSS.Transform.toString(transform),
+    // Translate only — never scale. Chips have varying widths, so the default
+    // `CSS.Transform` (which adds scaleX/scaleY) would squash/stretch the text.
+    transform: CSS.Translate.toString(transform),
     transition,
     opacity: isDragging ? 0.35 : 1,
   };
