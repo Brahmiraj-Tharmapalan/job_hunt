@@ -520,6 +520,7 @@ function dedupe(jobs: ApifyJob[]): ApifyJob[] {
 export async function fetchJobsFromSources(
   apiKey: string,
   search: SourceSearch & { max_items: number },
+  deadline?: number,
 ): Promise<ApifyJob[]> {
   // Every board self-filters by country (its buildRuns returns [] when none of
   // the selected countries apply), so we run them ALL and keep the ones that
@@ -539,7 +540,7 @@ export async function fetchJobsFromSources(
   if (runs.length === 0) return [];
 
   const settled = await Promise.allSettled(
-    runs.map((r) => runActor(apiKey, r.adapter.actor, r.spec.input)),
+    runs.map((r) => runActor(apiKey, r.adapter.actor, r.spec.input, deadline)),
   );
 
   const out: ApifyJob[] = [];

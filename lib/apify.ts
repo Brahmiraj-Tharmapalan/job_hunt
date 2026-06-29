@@ -40,11 +40,16 @@ export type ApifyJob = {
  * Run an actor to completion and return its dataset rows. `actor` is the API
  * path form "username~name". Throws on HTTP/timeout/abort so callers can decide
  * whether a given run is fatal or best-effort.
+ *
+ * `deadline` (epoch ms) is an optional caller-imposed wall-clock cap — the sort
+ * runs inline under a serverless budget (lib/sort-budget), so we stop waiting at
+ * whichever comes first: our own RUN_MAX_WAIT_MS or that deadline.
  */
 export async function runActor(
   apiKey: string,
   actor: string,
   input: Record<string, unknown>,
+  deadline?: number,
 ): Promise<Record<string, unknown>[]> {
   const auth = { Authorization: `Bearer ${apiKey}` };
 
@@ -67,9 +72,14 @@ export async function runActor(
   if (!runId || !datasetId) throw new Error("Apify didn't return a run id.");
 
   // 2. Poll until the run reaches a terminal state (or we hit the wait ceiling).
-  const deadline = Date.now() + RUN_MAX_WAIT_MS;
+  // The effective ceiling is whichever is sooner: our own max wait, or the
+  // caller's serverless-budget deadline.
+  const runDeadline = Math.min(
+    Date.now() + RUN_MAX_WAIT_MS,
+    deadline ?? Number.POSITIVE_INFINITY,
+  );
   let status = "READY";
-  while (Date.now() < deadline) {
+  while (Date.now() + POLL_INTERVAL_MS < runDeadline) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const runRes = await fetch(`${API}/actor-runs/${runId}`, {
       headers: auth,

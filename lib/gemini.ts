@@ -87,6 +87,10 @@ export async function parseCvWithGemini(
 const BATCH_SIZE = 25;
 /** Pause between batches to respect ~5 requests/min on the free tier. */
 const BATCH_DELAY_MS = 13_000;
+/** Rough cost of one scoring call, used only to decide whether the next batch
+ * can still finish before a caller's wall-clock deadline. Generous on purpose —
+ * better to defer a batch to the backlog than to start one we can't finish. */
+const EST_BATCH_MS = 9_000;
 
 export const jobScoreSchema = z.object({
   scores: z.array(
@@ -164,6 +168,7 @@ export async function scoreJobsWithGemini(
   apiKey: string,
   jobs: ScoreableJob[],
   settings: ScoreSettings,
+  deadline?: number,
 ): Promise<JobScore[]> {
   if (jobs.length === 0) return [];
   const google = createGoogleGenerativeAI({ apiKey });
@@ -208,6 +213,16 @@ Be strict on score: a role needing a stack the candidate doesn't have scores low
   const out: JobScore[] = [];
   for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
     const batch = jobs.slice(i, i + BATCH_SIZE);
+
+    // Respect a caller's wall-clock budget (the inline sort runs under a
+    // serverless limit). A later batch costs an inter-batch delay too. If the
+    // next batch can't finish in time, stop — the remaining jobs are saved
+    // unscored and scored first on the next sort.
+    if (deadline) {
+      const cost = (i > 0 ? BATCH_DELAY_MS : 0) + EST_BATCH_MS;
+      if (Date.now() + cost > deadline) break;
+    }
+
     if (i > 0) await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
 
     try {

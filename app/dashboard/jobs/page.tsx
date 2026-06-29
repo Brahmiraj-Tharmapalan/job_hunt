@@ -17,9 +17,12 @@ export const metadata: Metadata = {
 
 // The `runSort` server action invoked from this route runs the whole pipeline
 // inline (scrape → score → store) and can take minutes. Server Actions inherit
-// the maxDuration of the page that calls them, so grant the most a serverless
-// function allows (Vercel Pro: 300s). The Apify wait ceiling (lib/apify.ts) is
-// tuned to finish within this budget.
+// the maxDuration of the page that calls them, so request the most a serverless
+// function allows (Vercel Pro: 300s). NOTE: this is a ceiling, not a guarantee —
+// Vercel HOBBY silently clamps it to 60s. The real safeguard is the soft time
+// budget in lib/sort-budget (default 55s): the sort stops and saves a partial
+// before the host kills it, so a Hobby deploy returns a result instead of a 504.
+// On Pro, raise SORT_BUDGET_MS to use more of this 300s.
 export const maxDuration = 300;
 
 export default async function JobsPage() {

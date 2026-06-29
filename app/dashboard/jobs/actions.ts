@@ -14,6 +14,7 @@ import {
 } from "@/lib/gemini";
 import { fetchJobsFromSources } from "@/lib/sources";
 import { fetchApifyCredit } from "@/lib/apify";
+import { SORT_BUDGET_MS, SORT_SAVE_RESERVE_MS } from "@/lib/sort-budget";
 
 export type SyncSummary = {
   fetched: number;
@@ -116,6 +117,12 @@ export async function runSort(): Promise<RunSortState> {
     return { error: "ENCRYPTION_MASTER_KEY isn't set on the server." };
   }
 
+  // Wall-clock budget for this whole inline run. Scraping and scoring stop at
+  // `workDeadline` (leaving SORT_SAVE_RESERVE_MS to actually write the results)
+  // so the function returns a clean partial before the host kills it. See
+  // lib/sort-budget for why this exists (Vercel Hobby's 60s function cap).
+  const workDeadline = Date.now() + SORT_BUDGET_MS - SORT_SAVE_RESERVE_MS;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -151,13 +158,17 @@ export async function runSort(): Promise<RunSortState> {
   // Best-effort: one source failing doesn't sink the run.
   let fetched;
   try {
-    fetched = await fetchJobsFromSources(apifyKey, {
-      search_keywords: settings.search_keywords,
-      countries: settings.countries,
-      blocked_words: settings.blocked_words,
-      published_within_days: settings.published_within_days,
-      max_items: settings.max_items,
-    });
+    fetched = await fetchJobsFromSources(
+      apifyKey,
+      {
+        search_keywords: settings.search_keywords,
+        countries: settings.countries,
+        blocked_words: settings.blocked_words,
+        published_within_days: settings.published_within_days,
+        max_items: settings.max_items,
+      },
+      workDeadline,
+    );
   } catch (err) {
     console.error("Apify fetch failed:", err);
     const detail = err instanceof Error ? err.message : String(err);
@@ -239,13 +250,18 @@ export async function runSort(): Promise<RunSortState> {
   let scores: JobScore[] = [];
   let scoringWarning: string | null = null;
   try {
-    scores = await scoreJobsWithGemini(geminiKey, toScore, {
-      required_skills: settings.required_skills,
-      secondary_skills: settings.secondary_skills,
-      min_experience_years: settings.min_experience_years,
-      max_experience_years: settings.max_experience_years,
-      blocked_words: settings.blocked_words,
-    });
+    scores = await scoreJobsWithGemini(
+      geminiKey,
+      toScore,
+      {
+        required_skills: settings.required_skills,
+        secondary_skills: settings.secondary_skills,
+        min_experience_years: settings.min_experience_years,
+        max_experience_years: settings.max_experience_years,
+        blocked_words: settings.blocked_words,
+      },
+      workDeadline,
+    );
   } catch (err) {
     // scoreJobsWithGemini is partial-success and shouldn't throw, but keep this
     // as a safety net: on a hard failure, save everything unscored.
@@ -254,12 +270,13 @@ export async function runSort(): Promise<RunSortState> {
     scoringWarning = `Jobs saved unscored — Gemini couldn't score them: ${detail.replace(geminiKey, "***").slice(0, 160) || "unknown error"}`;
   }
 
-  // Gemini stops early when it hits its free-tier daily cap (~20 requests/day),
-  // so on a big sort some jobs come back unscored. Flag that — those rows still
-  // land (as 'Not scored'), they just weren't ranked this run.
+  // Scoring stops early either because Gemini hit its free-tier daily cap
+  // (~20 requests/day) or because we ran out of the run's time budget (the
+  // common case on Vercel Hobby's 60s function limit). Either way the unscored
+  // rows still land (as 'Not scored') and are scored first on the next sort.
   const unscored = toScore.length - scores.length;
   if (!scoringWarning && unscored > 0) {
-    scoringWarning = `Scored ${scores.length} of ${toScore.length} jobs — Gemini stopped early (likely its ~20/day free-tier limit). The other ${unscored} were saved unscored and will be picked up first on your next sort.`;
+    scoringWarning = `Scored ${scores.length} of ${toScore.length} jobs this run — the rest hit the run's time or Gemini's daily limit. The other ${unscored} were saved unscored and will be picked up first on your next sort.`;
   }
 
   const scoreById = new Map(scores.map((s) => [s.external_id, s]));
