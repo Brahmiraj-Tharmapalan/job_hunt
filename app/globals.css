@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+/*
+ * OpenJobHunt design tokens.
+ * Palette: Burgundy (#7F1D1D) + Blush (#F3D5D8) + Ivory (#FFFDF7).
+ * Elegant, premium, calm. Light-first to stay true to the luxury reference.
+ * Colors are exposed to Tailwind via @theme inline so utilities like
+ * `bg-background`, `text-foreground`, `text-accent`, `border-border` work.
+ */
+:root {
+  --background: #fffdf7; /* ivory */
+  --surface: #ffffff;
+  --surface-muted: #fbf1f1; /* faint blush */
+  --blush: #f3d5d8;
+  --blush-strong: #ecbfc4;
+  --foreground: #241f33; /* deep ink/navy */
+  --muted-foreground: #6c6678;
+  --border: #efe4e2;
+  --accent: #7f1d1d; /* burgundy */
+  --accent-strong: #641717;
+  --accent-contrast: #fffdf7;
+  --success: #166534;
+  --warn: #b45309;
+  --ring: #7f1d1d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-blush: var(--blush);
+  --color-blush-strong: var(--blush-strong);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Respect users who prefer less motion. Framer Motion reads this too, but we
+ * also neutralise pure-CSS ambient motion here. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Subtle dotted-grid background for sections. */
+.ojh-grid {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--accent) 10%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+}
