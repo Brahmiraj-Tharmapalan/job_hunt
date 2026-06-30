@@ -43,7 +43,14 @@ export default async function JobsPage() {
         )
         .eq("user_id", user.id)
         // Highest scores first; skipped/unscored (null) sink to the bottom.
-        .order("skill_match", { ascending: false, nullsFirst: false });
+        // Tiebreakers keep the order DETERMINISTIC: without them, Postgres
+        // returns equal-score rows in an arbitrary order that changes between
+        // queries, so every triage action (which revalidates this route) would
+        // reshuffle the list. Newest posting first among ties, then external_id
+        // as a final unique tiebreaker so the order is fully stable.
+        .order("skill_match", { ascending: false, nullsFirst: false })
+        .order("posted_at", { ascending: false, nullsFirst: false })
+        .order("external_id", { ascending: true });
       // Surface (don't swallow) query errors — e.g. a column that exists in the
       // code but not yet in the DB would otherwise make all jobs silently vanish.
       if (error) console.error("Failed to load jobs:", error.message);
